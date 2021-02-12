@@ -63,4 +63,4 @@ Congrats! You have completed your first Phind! Now you can review your Pharmacop
 
 ## Coming Soon
 
-Soon there will be a full  cli so you can do all the commands without changing directories. More utilites and options for output, clustering settings, and more. Also to come is pharmacophore feature scoring!
+Soon there will be a full CLI so you can do all the commands without changing directories. More utilites and options for output, clustering settings, and more. Also to come is pharmacophore feature scoring!
