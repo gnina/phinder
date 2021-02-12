@@ -57,4 +57,4 @@ python ../POpt2.py
 
 You will see the OptimalPharmacophore directory appear in the receptor directory with the generated pharmacophores!
 
-Congrats! You have completed your first Phind! Now you can review your Pharmacophores in PyMOL. To do so make sure you have the load_json module for PyMOL it can be found [here](https://sourceforge.net/projects/pharmer/files/)
+Congrats! You have completed your first Phind! Now you can review your Pharmacophores in PyMOL. To do so make sure you have the load_query module for PyMOL it can be found [here](https://sourceforge.net/projects/pharmer/files/)
