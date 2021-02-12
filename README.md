@@ -6,7 +6,7 @@ Under active development - **do not use**
 Semi-automatic identification of pharmacophore features from unbound receptor structure using gnina fragment docking.  
 
 ## Installation
-Currently installation should be done by cloning this GitHub repository as well as following the installation instructions for GNINA 1.0.
+Currently installation should be done by cloning this GitHub repository as well as following the installation instructions for GNINA 1.0 and rd-kit.
 
 To install simply do the following command:
 
@@ -60,3 +60,7 @@ python ../POpt2.py
 You will see the OptimalPharmacophore directory appear in the receptor directory with the generated pharmacophores!
 
 Congrats! You have completed your first Phind! Now you can review your Pharmacophores in PyMOL. To do so make sure you have the load_query module for PyMOL it can be found [here](https://sourceforge.net/projects/pharmer/files/)
+
+## Coming Soon
+
+Soon there will be a full  cli so you can do all the commands without changing directories. More utilites and options for output, clustering settings, and more. Also to come is pharmacophore feature scoring!
