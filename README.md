@@ -24,7 +24,7 @@ cp Phinder projectname/Phinder
 2. Go into said project
 ```bash
 cd projectname
-
+```
 
 ## Docking
 Docking is done using GNINA 1.0 where we have locked in a set of probes for the fragment docking. Those probes are as follows:
