@@ -16,7 +16,7 @@ git clone https://github.com/gnina/phinder.git
 Once you have cloned the repository you can work with the phinder scripts to generate pharmacophore!
 
 ## Usage
-Phinder is separted into two main tasks docking and phinding. Currently, Phinder is meant to be run within a project directory of which it's  structure is very important for easily working with files various files generated from the program. The best way to run phinder is to do the following:
+Currently, Phinder is meant to be run within a project directory of which it's structure is very important for easily working with various files generated from the program. The best way to run phinder is to do the following:
 
 1. Create a project and copy Phinder into said project
 ```bash
@@ -51,6 +51,6 @@ To phind pharmacophores navigate to the Pharmacophore Workplace and run the Phin
 python Phinder.py -r receptor -l ligand -o output_directory
 ```
 
-You will see the OptimalPharmacophore directory appear in the receptor directory with the generated pharmacophores!
+You will see the GeneratedPharma.json file in the output directory!
 
 Congrats! You have completed your first Phind! Now you can review your Pharmacophores in PyMOL. To do so make sure you have the load_query module for PyMOL it can be found [here](https://sourceforge.net/projects/pharmer/files/)
