@@ -1037,7 +1037,7 @@ def main():
     parser.add_argument("-l","--ligandFile",type=str, default="crystal_ligand.mol2",help="When docking a single Ligand-Receptor Pair, Ligand File. Takes .mol2, and might take other formats.")
     
     ### Docking Parameter
-    parser.add_argument("-n","--numMode",type=int, default=10, help="Number of dockings to do for each probe. (Default: 100)")
+    parser.add_argument("-n","--numMode",type=int, default=100, help="Number of dockings to do for each probe. (Default: 100)")
     
     ### Pharmacophore Feature Generation Parameters
     
