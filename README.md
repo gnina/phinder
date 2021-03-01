@@ -44,7 +44,7 @@ Docking is performed if no fragment docked files are detected (fragmentDocked.sd
 
 ## Phinding
 
-To phind pharmacophores navigate to the Pharmacophore Workplace and run the Phinder.py file inside your receptor directory. Phinder.py will automatically dock and generate a single pharmacophore feature file (GeneratedPharma.json) in the output directory that was specified within the receptor directory you created for you receptor of interest. To run phinder use the following command:
+To phind pharmacophores use the Phinder.py file on your receptor of choice. All you have to do is specify the locations of the receptor, ligand, and output directory. Phinder.py will automatically dock and generate all pharmacophore features in a single file (GeneratedPharma.json) in the output directory that was specified. To run phinder use the following command:
 
 ```bash
 ## From Phinder Home Directory
