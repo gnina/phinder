@@ -1073,31 +1073,31 @@ def main():
         for kind in kinds:
             if(kind=="Hydrophobic"):
                 SMART=HYDROPHOBIC
-                nuPo= 6
-                maxEne= -2
+                nuPo= 10
+                maxEne= -2.5
                 criteria = "distance"
                 method = "ward"
                 clusterThreshold = 5
                 THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
             elif(kind=="Aromatic"):
                 SMART= AROMATIC
-                nuPo= 6
-                maxEne= -2
+                nuPo= 10
+                maxEne= -2.5
                 criteria = 'distance'
                 method = 'ward'
-                clusterThreshold = 6
+                clusterThreshold = 9
                 THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
             elif(kind=="HydrogenDonor"):
                 SMART=HYDROGEN_DONOR
-                nuPo= 4
-                maxEne= -2
+                nuPo= 10
+                maxEne= -2.5
                 criteria = 'distance'
                 method = 'ward'
-                clusterThreshold = 5
+                clusterThreshold = 9
                 THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
             elif(kind=="HydrogenAcceptor"):
                 SMART=HYDROGEN_ACCEPTOR
-                nuPo= 4
+                nuPo= 10
                 maxEne= -2
                 criteria = 'distance'
                 method = 'ward'
@@ -1105,8 +1105,8 @@ def main():
                 THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
             elif(kind=="NegativeIon"):
                 SMART=NEGATIVE_ION
-                nuPo= 3
-                maxEne= -3
+                nuPo= 10
+                maxEne= -2
                 criteria = 'distance'
                 method = 'ward'
                 clusterThreshold = 1
@@ -1114,10 +1114,10 @@ def main():
             elif(kind=="PositiveIon"):
                 SMART=POSITIVE_ION
                 nuPo=6
-                maxEne= -1
+                maxEne= -2
                 criteria = 'distance'
                 method = 'complete'
-                clusterThreshold = 6
+                clusterThreshold = 9
                 THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
 
             allSpheres=[]
