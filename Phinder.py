@@ -1059,14 +1059,11 @@ def main():
 #-------------------------------------------------------------------------------
         
         for key in fragments:
-            if check_docked(dockedFiles, os.listdir(out_dir)) == True:
-                print("Files have been Docked")
-            else:
-                f = open("tempFragment.sdf", "w")
-                f.write(fragments[key])
-                f.close()
-                subprocess.run(["gnina", "-r", recept, "-l", "tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--autobox_ligand", args.ligandFile])
-                os.remove('tempFragment.sdf')
+            f = open("tempFragment.sdf", "w")
+            f.write(fragments[key])
+            f.close()
+            subprocess.run(["gnina", "-r", recept, "-l", "tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--autobox_ligand", args.ligandFile])
+            os.remove('tempFragment.sdf')
 #-------------------------------------------------------------------------------
 # Generate Pharmacophore
 #-------------------------------------------------------------------------------
