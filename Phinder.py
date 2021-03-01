@@ -1159,11 +1159,31 @@ def main():
                     #print(allSpheres)
 
 
-            pharma=allJsonify(kind, allSpheres)
-            jason = json.dumps(pharma)
-            f = open(out_dir+"/"+"GeneratedPharma.json","a")
-            f.write(jason)
-            f.close()
+                if os.path.exists(out_dir+'/'+'GeneratedPharma.json') == False:
+                    #If you want to remove all the single molecule clusters
+                    allSpheres=purge(allSpheres, THRESHOLD)
+                    pharma=allJsonify(kind, allSpheres)
+                    jason = json.dumps(pharma)
+                    f = open(out_dir+"/"+"GeneratedPharma.json","w")
+                    f.write(jason)
+                    f.close()
+
+                else:
+                    allspheres = purge(allSpheres, THRESHOLD)
+                    pharma = jsonify(kind, allSpheres)
+                    # function to add to JSON
+                    def write_json(data, filename=out_dir+'GeneratedPharma.json'):
+                        with open(filename,'w') as f:
+                            json.dump(data, f, indent=4)
+
+                    with open(out_dir+'GeneratedPharma.json') as json_file:
+                        data = json.load(json_file)
+
+                        temp = data['points']
+
+                        temp.extend(pharma)
+
+                    write_json(data)
 
     else:
         file = np.genfromtxt(args.inputFile, dtype=str, delimiter=',')
@@ -1273,13 +1293,33 @@ def main():
                         allSpheres.extend(thingCenterspheres)
                         #If you want to remove all the single molecule clusters
                         allSpheres=purge(allSpheres, THRESHOLD)
+                        
+                    if os.path.exists(out_dir+'/'+'GeneratedPharma.json') == False:
 
+                        #If you want to remove all the single molecule clusters
+                        allSpheres=purge(allSpheres, THRESHOLD)
+                        pharma=allJsonify(kind, allSpheres)
+                        jason = json.dumps(pharma)
+                        f = open(out_dir+"/"+"GeneratedPharma.json","w")
+                        f.write(jason)
+                        f.close()
 
-                pharma=allJsonify(kind, allSpheres)
-                jason = json.dumps(pharma)
-                f = open(out_dir+"/"+"GeneratedPharma.json","a")
-                f.write(jason)
-                f.close()
+                    else:
+                        allspheres = purge(allSpheres, THRESHOLD)
+                        pharma = jsonify(kind, allSpheres)
+                        # function to add to JSON
+                        def write_json(data, filename=out_dir+'GeneratedPharma.json'):
+                            with open(filename,'w') as f:
+                                json.dump(data, f, indent=4)
+
+                        with open(out_dir+'GeneratedPharma.json') as json_file:
+                            data = json.load(json_file)
+
+                            temp = data['points']
+
+                            temp.extend(pharma)
+
+                        write_json(data)
 
 
 if __name__ == '__main__':
