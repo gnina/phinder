@@ -1161,7 +1161,7 @@ def main():
 
             pharma=allJsonify(kind, allSpheres)
             jason = json.dumps(pharma)
-            f = open(out_dir+"/"+kind+"GeneratedPharma.json","w")
+            f = open(out_dir+"/"+"GeneratedPharma.json","w")
             f.write(jason)
             f.close()
 
@@ -1277,7 +1277,7 @@ def main():
 
                 pharma=allJsonify(kind, allSpheres)
                 jason = json.dumps(pharma)
-                f = open(out_dir+"/"+kind+"GeneratedPharma.json","w")
+                f = open(out_dir+"/"+"GeneratedPharma.json","w")
                 f.write(jason)
                 f.close()
 
