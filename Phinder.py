@@ -1172,9 +1172,10 @@ def main():
                     def write_json(data, filename=out_dir+'GeneratedPharma.json'):
                         with open(filename,'w') as f:
                             json.dump(data, f, indent=4)
-
+                    y = {"receptor": str(open(recept).read()), "recname": recept}
                     with open(out_dir+'GeneratedPharma.json') as json_file:
                         data = json.load(json_file)
+                        data.update(y)
 
                         temp = data['points']
 
@@ -1308,9 +1309,12 @@ def main():
                         def write_json(data, filename=out_dir+'GeneratedPharma.json'):
                             with open(filename,'w') as f:
                                 json.dump(data, f, indent=4)
+                        
+                        y = {"receptor": str(open(recept).read()), "recname": recept}
 
                         with open(out_dir+'GeneratedPharma.json') as json_file:
                             data = json.load(json_file)
+                            data.update(y)
 
                             temp = data['points']
 
