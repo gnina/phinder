@@ -1047,7 +1047,6 @@ def main():
     working_dir = os.getcwd()
     args = parser.parse_args()
     fragmentPrefilter = [-3.49, -3.19, -2.66, -2.33, -3.00, -2.50, -3.00, -1.00, -3.00]
-    fragmentPrefilter = [0, 0, 0, 0, 0, 0, 0, 0, 0]
     kinds=["Aromatic", "PositiveIon", "NegativeIon", "HydrogenDonor", "HydrogenAcceptor", "Hydrophobic"]
     
     if args.inputFile == None:
@@ -1071,7 +1070,7 @@ def main():
             if(kind=="Hydrophobic"):
                 SMART=HYDROPHOBIC
                 nuPo= 10
-                maxEne= -2.5
+                maxEne= -2
                 criteria = "distance"
                 method = "ward"
                 clusterThreshold = 5
@@ -1079,7 +1078,7 @@ def main():
             elif(kind=="Aromatic"):
                 SMART= AROMATIC
                 nuPo= 10
-                maxEne= -2.5
+                maxEne= -2
                 criteria = 'distance'
                 method = 'ward'
                 clusterThreshold = 9
@@ -1087,7 +1086,7 @@ def main():
             elif(kind=="HydrogenDonor"):
                 SMART=HYDROGEN_DONOR
                 nuPo= 10
-                maxEne= -2.5
+                maxEne= -2
                 criteria = 'distance'
                 method = 'ward'
                 clusterThreshold = 9
