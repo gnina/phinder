@@ -7,11 +7,12 @@
 
 from __future__ import print_function  # ensures print function compatibility with Python3
 import argparse
+from sys import argv
 # safely deal with file paths
 import rdkit
 import math
 import os
-from matplotlib import pyplot as plt
+#from matplotlib import pyplot as plt
 import scipy.cluster.hierarchy as scip
 import numpy as np
 from rdkit import Chem, ForceField
@@ -21,11 +22,14 @@ import json, sys
 import scipy
 from scipy import spatial
 import io
+import pandas as pd
+import pickle
+
 #-------------------------------------------------------------------------------
 # FRAGMENTS
 #-------------------------------------------------------------------------------
 
-dockedFiles = ["benzeneDocked.sdf", "acetateDocked.sdf", "acetamideDocked.sdf", "isobutaneDocked.sdf", "isopropanolDocked.sdf", "isopropylamine.sdf", "imidazoleDocked.sdf", "guanadineDocked.sdf", "waterDocked.sdf"]
+kinds=["Aromatic", "PositiveIon", "NegativeIon", "HydrogenDonor", "HydrogenAcceptor", "Hydrophobic"]
 
 fragments = {
     'benzene': """ 
@@ -632,7 +636,6 @@ M  END
 0.04 
 0 
 0 
-
 > <PUBCHEM_SHAPE_SELFOVERLAP> 
 122.282 
  
@@ -689,7 +692,7 @@ M  END""",
 M  END""",
     "guanidine": """3520
   -OEChem-02222113143D
-
+  
   9  8  0     0  0  0  0  0  0999 V2000
    -0.7372   -1.1253    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
    -0.6615    1.1693    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
@@ -711,13 +714,10 @@ M  END""",
 M  END
 > <PUBCHEM_COMPOUND_CID>
 3520
-
 > <PUBCHEM_CONFORMER_RMSD>
 0.4
-
 > <PUBCHEM_MMFF94_ENERGY>
 9.3667
-
 $$$$"""
 }
 
@@ -735,7 +735,7 @@ HYDROGEN_ACCEPTOR=["[#7&!$([nX3])&!$([NX3]-*=[!#6])&!$([NX3]-[a])&!$([NX4])&!$(N
 "[$([O])&!$([OX2](C)C=O)&!$(*(~a)~a)]"]
 POSITIVE_ION =["[+,+2,+3,+4]",
 "[$(CC)](=N)N",
-"[$(C(N)(N)=N)]",
+"[$([NH2]C(N)(=N))]", #originally [$(C(N)(N)=N)]]
 "[$(n1cc[nH]c1)]"]
 NEGATIVE_ION = ["[-,-2,-3,-4]",
 "C(=O)[O-,OH,OX1]",
@@ -763,116 +763,52 @@ HYDROPHOBIC=[
 "[$([CH2X4,CH1X3,CH0X2]~[CH2X4,CH1X3,CH0X2]~[$([CH2X4,CH1X3,CH0X2]~[$([!#1]);!$([CH2X4,CH1X3,CH0X2])])])]~[CH2X4,CH1X3,CH0X2]~[CH2X4,CH1X3,CH0X2]~[CH2X4,CH1X3,CH0X2]",
 "[$([S]~[#6])&!$(S~[!#6])]",
     ]
-pharmakinds = ["HydrogenDonor","HydrogenAcceptor","PositiveIon","NegativeIon","Hydrophobic","Aromatic"]
-
+    
 #-------------------------------------------------------------------------------
 # FUNCTION DEFINITIONS
 #-------------------------------------------------------------------------------
 
 
 def check_docked(dockedList, directory):
-    for x in dockedList:
-        allItems = len(dockedList)
-        count = 0
-        if any(directory) == x:
+    dockedCount=len(dockedList) #total number of docked files that should be in the folder
+    count=0
+    dirFiles=os.listdir(directory) #turn the folder contents into a list 
+    for x in dockedList: #check if each docked file is in the folder
+        if x in dirFiles:
             count += 1
         else:
             count +=0
-    if allItems >= count:
+    if count>=dockedCount: #if each docked file is in the folder it will return true 
         return True
     else:
         return False
 
-def compute_matches(ref, test, kind):
-    '''Return number of matches and not matched points for given kind'''
-    refxyz = [(pt['x'],pt['y'],pt['z']) for pt in ref if pt['name'] == kind]
-    testxyz = [(pt['x'],pt['y'],pt['z']) for pt in test if pt['name'] == kind]
-    testradii = [pt['radius'] for pt in test if pt['name'] == kind]
-    
-    if len(refxyz) == 0 or len(testxyz) == 0:
-        return 0,len(refxyz)+len(testxyz)
-    dists = spatial.distance.cdist(refxyz,testxyz) #rows are ref, columns test
-    matches = 0
-
-    while np.any(np.isfinite(dists)):
-        #find shortest distance
-        r,t = np.unravel_index(np.argmin(dists), dists.shape)  #argmin returns flattened index
-        #r is the index of the ref point, t of the test point
-        if dists[r,t] < testradii[t]: #a match!
-            matches += 1
-            dists[r,:] = np.inf #mark points as matched - can only match once
-            dists[:,t] = np.inf
-        else:
-            dists[:,t] = np.inf #there's nothing this can match with
-        
-        test_len = len(testxyz)
-        ref_len = len(refxyz)
-        intersection = ref_len + test_len - 2*matches
-    return matches, intersection, ref_len, test_len
-
-
-            
-def print_tani(m,u,kind):
-    '''print tanimoto'''
-    if m+u > 0:
-        tani = m/float(m+u)
-    else:
-        tani = 0;
-    
-    #print('%16s Tanimoto: %.3f\tMatches: %d\tUnmatches: %d'%(kind,tani,m,u))
-    return tani
-
-def print_recall(matches, relevant_points):
-    '''prints the recall'''
-    if matches+relevant_points > 0:
-        recall = matches/relevant_points
-    else:
-        recall = 0
-
-    return recall
-
-def print_precision(matches, all_positives):
-    '''prints precision'''
-    if matches+all_positives > 0:
-        precision = matches/all_positives
-    else:
-        precision = 0
-
-    return precision
-
-def splitter(combinedList):
-    centerList=[]
-    energyList=[]
-    for item in combinedList:
-        centerList.append(item[0])
-        energyList.append(item[1])
-    return centerList, energyList
-
-#Finds the center coordinates of each instance of pharmacophore
-#Outputs: [[coordinates], energy]
-def getCenters(fileName, smartList):
+#Finds the center coordinates of each instance of pharmacophore by identifying each docked fragment that meets the requirement for a given pharmacophore type
+#The "pharmacophores" generated by this function have not undergone any filtering or processing and are literally just one docked fragment
+#Outputs: [[coordinates], minAffinity, cnnAffinity, cnnScore] 
+def getCenters(fileName, smartList): #fileName is each docked file sdf (like benzenDocked.sdf), smartList (AKA SMART) is the type of pharmacophore like Aromatic 
+    print(fileName)
     sdfFileData = rdkit.Chem.rdmolfiles.SDMolSupplier(fileName)
     #Coordlist is a list of coordinates (so a list of multiple [x,y,z] coordinates) of the center
     #of each present instance of the specified pharmacophore type
-    coordList=[]
+    centerList=[]
+    energyList=[]
+    cnnenergyList=[]
+    cnnscoreList=[]
     for mol in sdfFileData:
-        minAffinity=0
         for smart in smartList:
+            minAffinity=0
             patt = Chem.MolFromSmarts(smart)
             if(mol.HasSubstructMatch(patt)):
-                
-                #substructIndexList is a list of lists of atom indexes. 
-                #Each internal list contains the atom index values of the atoms that make up a
-                #pharmacophore
+                #substructIndexList is a list of all instances that a given pharmacophore kind overlaps with mol (the docked fragment within the sdf)
+                #substructIndexList=[substructIndex1,substructIndex2,...]
+                #Each substructIndex is a list of atoms in each instance of overlap
                 substructIndexList=mol.GetSubstructMatches(patt)
-                #print(substructIndexList)
-                #substructIndexList -> [substructIndex1, substructIndex2, ...]
-                #substructIndex -> [atomIndex1, atomIndex2, atomIndex3, ...]
-                #so: substructIndexList -> [[int1, int2, int3, ...], [int1, int2, int5, ...], ...]
-                
                 for substructIndex in substructIndexList:
                     molConform=mol.GetConformers()
                     minAffinity=float(mol.GetProp('minimizedAffinity'))
+                    cnnAffinity=float(mol.GetProp('CNNaffinity'))
+                    cnnScore=float(mol.GetProp('CNNscore'))
                     
                     #It's at 0 because there is only one conformer for the molecule. 
                     #I turned it into conformer because there are functions that only work with
@@ -882,7 +818,7 @@ def getCenters(fileName, smartList):
                     atomPositions=[]
                     for atomIndex in substructIndex:
                         atomPositions.append(molConform[0].GetAtomPosition((atomIndex)))
-                    #print(molConform[0].GetPositions())
+                        #print(molConform[0].GetPositions())
                     x=0
                     y=0
                     z=0
@@ -895,34 +831,109 @@ def getCenters(fileName, smartList):
                     x=x/numAtoms
                     y=y/numAtoms
                     z=z/numAtoms
-                   # print([x,y,z])
-                    coordList.append([[x,y,z], minAffinity])
-    
-    return coordList
+                    #coordList is a list of points, where each point represents an instsance of overlap between mol and feature type structure
+                    #the actual coordinates are an average between the atoms in the overlapping structure
+                    centerList.append([x,y,z])
+                    energyList.append(minAffinity)
+                    cnnenergyList.append(cnnAffinity)
+                    cnnscoreList.append(cnnScore)
+    return centerList,energyList,cnnenergyList,cnnscoreList
 
-#Obtains the indices of each element in each cluster.
+#Return a list of indices of each element in the cluster ordered by cluster number 
 def cluster_indices(cluster_assignments):
-    n = cluster_assignments.max()
+    n = cluster_assignments.max() #n=number of clusters
     indices = []
     for cluster_number in range(1, n + 1):
         indices.append(np.where(cluster_assignments == cluster_number)[0].tolist())
     return indices
 
-def calcClusterEnergy(indexList, energyList):
-    aveEnergyList=[]
+def calcClusterEnergy(indexList, energyList, cnnenergyList, cnnscoreList, fileList): 
+    aveEnergyList=[] #average minimized affinity
+    minEnergyList=[] #minimum min affinity 
+    maxEnergyList=[] #maximimum min affinity 
+    avecnnEnergyList=[] #average CNN affinity
+    mincnnEnergyList=[] #minimum CNN affinity
+    maxcnnEnergyList=[] #max CNN affinity
+    avecnnScoreList=[] #average CNN score 
+    mincnnScoreList=[] #minimum CNN score
+    maxcnnScoreList=[] #maximum CNN score 
+    fragtypeList=[] #list of fragment types that make up a cluster 
+    clustersizeList=[] #list of cluster sizes
     for cluster in indexList:
         aveEnergy=0.0
+        avecnnEnergy=0.0
+        avecnnScore=0.0
+        fragtypelistcluster=[]
         for item in cluster:
-            aveEnergy+=energyList[item]
-        aveEnergy=aveEnergy/len(cluster)
-        aveEnergyList.append(aveEnergy)
-    return aveEnergyList
+            aveEnergy+=energyList[item] 
+            try:
+                minEnergy
+            except NameError:
+                minEnergy=energyList[item]
+            else:
+                if energyList[item] < minEnergy:
+                    minEnergy=energyList[item]
+            try:
+                maxEnergy
+            except NameError:
+                maxEnergy=energyList[item]
+            else:
+                if energyList[item] > maxEnergy:
+                    maxEnergy=energyList[item]
+            avecnnEnergy+=cnnenergyList[item]
+            try:
+                mincnnEnergy
+            except NameError:
+                mincnnEnergy=cnnenergyList[item]
+            else:
+                if cnnenergyList[item] < mincnnEnergy:
+                    mincnnEnergy=cnnenergyList[item]
+            try:
+                maxcnnEnergy
+            except NameError:
+                maxcnnEnergy=cnnenergyList[item]
+            else:
+                if cnnenergyList[item] > maxcnnEnergy:
+                    maxcnnEnergy=cnnenergyList[item]
+            avecnnScore+=cnnscoreList[item]
+            try:
+                mincnnScore
+            except NameError:
+                mincnnScore=cnnscoreList[item]
+            else:
+                if cnnscoreList[item] < mincnnScore:
+                    mincnnScore=cnnscoreList[item]
+            try:
+                maxcnnScore
+            except NameError:
+                maxcnnScore=cnnscoreList[item]
+            else:
+                if cnnscoreList[item] > maxcnnScore:
+                    maxcnnScore=cnnscoreList[item]
+            fragname=fileList[item] #clean up the fragname and remove "Docked.sdf"
+            fragname=fragname[0:-10]
+            fragtypelistcluster.append(fragname)     
+        aveEnergy=aveEnergy/len(cluster) #average minimized affinity
+        aveEnergyList.append(aveEnergy) 
+        minEnergyList.append(minEnergy)
+        maxEnergyList.append(maxEnergy)     
+        avecnnEnergy=avecnnEnergy/len(cluster) #average CNN affinity 
+        avecnnEnergyList.append(avecnnEnergy)
+        mincnnEnergyList.append(mincnnEnergy)
+        maxcnnEnergyList.append(maxcnnEnergy)
+        avecnnScore=avecnnScore/len(cluster) #average CNN score 
+        avecnnScoreList.append(avecnnScore)  
+        mincnnScoreList.append(mincnnScore)
+        maxcnnScoreList.append(maxcnnScore)
+        fragtypeList.append(fragtypelistcluster) #fragment types 
+        clustersizeList.append(len(cluster))
+    return aveEnergyList, minEnergyList, maxEnergyList, avecnnEnergyList, mincnnEnergyList, maxcnnEnergyList, avecnnScoreList, mincnnScoreList, maxcnnScoreList, fragtypeList, clustersizeList
 
-def unSplitter(li1, li2):
+def unSplitter(li1, li2, li3, li4, li5, li6, li7, li8, li9, li10, li11, li12):
     comList=[]
     x=0
     while x<len(li2):
-        comList.append([li1[x], li2[x]])
+        comList.append([li1[x], li2[x], li3[x], li4[x], li5[x], li6[x], li7[x], li8[x], li9[x], li10[x], li11[x], li12[x]])
         x+=1
     return comList
 
@@ -933,20 +944,47 @@ def sorter(combinedList):
 
 
 #Converts the raw cluster into something readable, and sorts the results, and 
-#Outputs a list [[[coordinatesOfCenterOfCluster], radius,[Average Energy]],[[coordinatesOfCenterOfCluster], radius,[Average Energy]]...]
-def sortCenter(coordinates, typeCluster, typeEnergy):
-    clustEnergy=calcClusterEnergy(cluster_indices(typeCluster), typeEnergy)
-    li=unSplitter(cluster_indices(typeCluster),clustEnergy)
+#Outputs a list [[[coordinatesOfCenterOfCluster], radius, avgerage minimized affinity, minimum min affinity, maximum min affinity, average cnn affinity, min cnn affinity, max cnn affinity, average cnn score, min cnn score, max cnn score, cluster size, guanidine count, water count, isobute count, ...]
+def sortCenter(coordinates, cluster, energy, cnnEnergy, cnnScore, file):
+    clustEnergy, clustEnergymin, clustEnergymax, clustcnnEnergy, clustcnnEnergymin, clustcnnEnergymax, clustcnnScore, clustcnnScoremin, clustcnnScoremax, fragList, sizeList=calcClusterEnergy(cluster_indices(cluster), energy, cnnEnergy, cnnScore, file)
+    li=unSplitter(cluster_indices(cluster),clustEnergy, clustEnergymin, clustEnergymax, clustcnnEnergy, clustcnnEnergymin, clustcnnEnergymax, clustcnnScore, clustcnnScoremin, clustcnnScoremax, fragList, sizeList)
     sortedLi=sorter(li)
     returnList =[]
     for clust in sortedLi:
-        clusterIndex=clust[0]
-        #print(clusterIndex)
+        guanidine=0
+        water=0
+        isobutane=0
+        acetate=0
+        imidazole=0
+        isopropanol=0
+        acetamide=0
+        isopropylamine=0
+        benzene=0
+        clusterIndex=clust[0] #clusterIndex=a list of all of the indices in the cluster
         clusterCoordinates = [coordinates[i] for i in clusterIndex ]
         cent=clusterCenter(clusterCoordinates)
         radi=radius(cent, clusterCoordinates)
-        returnList.append([cent, radi, clust[1], len(clusterIndex)])
-        #print(len(clusterIndex))
+        typefragList=clust[10]
+        for frag in typefragList:
+            if frag == "guanidine":
+                guanidine+=1
+            if frag == "water":
+                water+=1
+            if frag == "isobutane":
+                isobutane+=1 
+            if frag == "acetate":
+                acetate+=1
+            if frag == "imidazole":
+                imidazole+=1
+            if frag == "isopropanol":
+                isopropanol+=1
+            if frag == "acetamide":
+                acetamide+=1
+            if frag == "isopropylamine":
+                isopropylamine+=1
+            if frag == "benzene":
+                benzene+=1
+        returnList.append([cent,radi, clust[1],clust[2],clust[3],clust[4],clust[5],clust[6],clust[7],clust[8],clust[9],len(clusterIndex),guanidine,water,isobutane,acetate,imidazole,isopropanol,acetamide,isopropylamine,benzene])
     return returnList
 
 def clusterCenter(coordList):
@@ -961,13 +999,12 @@ def clusterCenter(coordList):
     centerCoord=[x/nu,y/nu,z/nu]
     return centerCoord
 
-def radius(center, coordinates):
+def radius(center, coordinates): #use raidus of 1 A for cut off from center for feature labeling, >2 is false example, 1-2 is intermediate emit from training 
     #Distance between them all. Find the farthest distance, that's the radius.
-    radi=1.0
-    #for coord in coordinates:
-       # dist=math.sqrt((coord[0] - center[0])**2 + (coord[1] - center[1])**2 + (coord[2] - center[2])**2)
-        #if dist>=radi:
-         #   radi=dist
+    radiList=[]
+    for coord in coordinates:
+        radiList.append(math.sqrt((coord[0] - center[0])**2 + (coord[1] - center[1])**2 + (coord[2] - center[2])**2))
+    radi=max(radiList)
     return radi
 
 def jsoniload():
@@ -1006,13 +1043,107 @@ def purge(bigList, thresholds):
     numPoints=thresholds.get("numPoint")
     energ=thresholds.get("energy")
     for ite in bigList:
-        #If number of points is greater than 10 and energy less than -3.0
-        if(ite[3]>=numPoints and ite[2]<=energ):
+        #If number of points is greater than numPoint and energy less than energ (set based on pharma kind)
+        if(ite[11]>=numPoints and ite[2]<=energ):
             purgedList.append(ite)
     return purgedList
 
+#returns a list [[pharmakind, [x,y,z], radius, avg. min affinity, min min affinity, max min affinity, avg cnn affinity, min cnn affinity, max cnn affinity, avg cnn score, min cnn score, max cnn score, cluster size, fragment counts for each type],...]
+def all_kinds_list(spheres_list,kind):
+    li=[]
+    for sphere in spheres_list:
+        li2=[]
+        li2.append(kind)
+        for item in sphere:
+            li2.append(item)
+        li.append(li2)
+    return li
 
+#returns a dataframe of all spheres of all types 
+def make_df(final_spheres):
+    li0,li1,li2,li3,li4,li5,li6,li7,li8,li9,li10,li11,li12,li13,li14,li15,li16,li17,li18,li19,li20,li21,li22,li23=[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]
+    for sphere in final_spheres:
+        li0.append(sphere[0]) #kind
+        li1.append(sphere[1][0]) #x coord
+        li2.append(sphere[1][1]) #y coord
+        li3.append(sphere[1][2]) #z coord
+        li4.append(sphere[2]) #radius
+        li5.append(sphere[3]) #ave min affinity
+        li6.append(sphere[4]) #min min affinity
+        li7.append(sphere[5]) #max min affinity
+        li8.append(sphere[6]) #ave cnn affinity
+        li9.append(sphere[7]) #min cnn affinity
+        li10.append(sphere[8]) #max cnn affinity
+        li11.append(sphere[9]) #ave cnn score
+        li12.append(sphere[10]) #min cnn score
+        li13.append(sphere[11]) #max cnn score 
+        li14.append(sphere[12]) #size
+        li15.append(sphere[13]) #guanidine
+        li16.append(sphere[14]) #water
+        li17.append(sphere[15]) #isobutane
+        li18.append(sphere[16]) #acetate
+        li19.append(sphere[17]) #imidazole
+        li20.append(sphere[18]) #isopropanol
+        li21.append(sphere[19]) #acetamide 
+        li22.append(sphere[20]) #isopropylamine 
+        li23.append(sphere[21]) #benzene
+    zipped=list(zip(li1,li2,li3,li0,li4,li5,li6,li7,li8,li9,li10,li11,li12,li13,li14,li15,li16,li17,li18,li19,li20,li21,li22,li23))
+    df=pd.DataFrame(zipped,columns=['x','y','z','pharmaKind','radius','ave minAffinity','min minAffinity','max minAffinity','ave cnnAffinity','min cnnAffinity',
+        'max cnnAffinity','ave cnnScore','min cnnScore','max cnnScore','size','guanidineCount','waterCount','isobutaneCount','acetateCount','imidazoleCount',
+        'isopropanolCount','acetamideCount','isopropylamineCount','benzenCount'])
+    return df
 
+#rank features with machine learning models and outputs in dataframe
+models=["LinearRegression","LogisticRegression","NeuralNetwork"]
+def rank_ml(features): #input is a dataframe of all features of all kinds 
+    all_kinds_ranked=[]
+    for kind in kinds:
+        df=features[features.pharmaKind==kind].copy() #sort for just a given pharmaKind 
+        D=df.drop(["x","y","z","pharmaKind"],axis=1).to_numpy() #remove unncessary columns for ranking 
+        for m in models:
+            filename="/net/pulsar/home/koes/ron33/pdb-bind-refined/"+m+"Final_"+kind+".sav"
+            model=pickle.load(open(filename,'rb')) #load pre-trained model
+            if hasattr(model,"predict_proba"):
+                p=model.predict_proba(D)[:,1]
+            else:
+                p=model.predict(D)
+            df[m]=p #create a new column for predictions for each model type 
+        all_kinds_ranked.append(df)
+    all_kinds_ranked_df=pd.concat(all_kinds_ranked)
+    return all_kinds_ranked_df
+
+def rank_ml_thresholded(df,n,model): #n is the number of features to be returned in the final json
+    top1=df[model].max() #top prediction with given model
+    index=df[df[model]==top1].index #index of top prediction
+    T=df[df[model]==top1] #T will become the dataframe of the top x 
+    df=df.drop(index=index, axis=1) #drop the top row so we can select from the others
+    while len(T)<n:
+        topn=df[model].max()
+        row=df[df[model]==topn] #row with the top prediction
+        pk=row.pharmaKind.item() #pharmaKind, index, x, y, and z info from the row
+        index=row.index
+        x1=row.x.item()
+        y1=row.y.item()
+        z1=row.z.item()
+        if len(T[T.pharmaKind==pk])==0: #no feature of this pharmaKind yet in the top 10
+            T=pd.concat([T,row],ignore_index=True) #add to list of top 10
+            df=df.drop(index=index,axis=0) #remove from overall dataframe
+        else:
+            df2=T[T.pharmaKind==pk] #dataframe of all of the existing features of this type in the topn 
+            overlap=0 
+            for r in range(len(df2)):
+                x2=df2.iloc[r].x.item()
+                y2=df2.iloc[r].y.item()
+                z2=df2.iloc[r].z.item()
+                dist=math.sqrt((x2-x1)**2+(y2-y1)**2+(z2-z1)**2)
+                if dist<=2:
+                    overlap+=1
+            if overlap!=0: #this indicates that there is one or more feature of the same pharmakind within less than a 2A distnace already in the top 10
+                df=df.drop(index=index,axis=0) #remove from overall dataframe and don't add to top 10  
+            else:
+                T=pd.concat([T,row],ignore_index=True) #add to list of top N
+                df=df.drop(index=index,axis=0) #remove from overall dataframe
+    return(T) #T is a dataframe of the Top N with no features of the same kind within 2 A
 #-------------------------------------------------------------------------------
 # MAIN
 #-------------------------------------------------------------------------------
@@ -1022,305 +1153,220 @@ def purge(bigList, thresholds):
 Puts it all together.
 """
 def main():
+
+    fileList = ['benzeneDocked.sdf','isopropylamineDocked.sdf', 'acetamideDocked.sdf', 'isopropanolDocked.sdf', 'imidazoleDocked.sdf', 'acetateDocked.sdf', 'isobutaneDocked.sdf', 'waterDocked.sdf', 'guanidineDocked.sdf']
     
 ##
 
     parser = argparse.ArgumentParser(description='Phinder generates pharmacophore features from receptor structures using fragment docking via GNINA',formatter_class=argparse.RawDescriptionHelpFormatter)
     
     
-    ### Using a File input of Locations for Pharmacophore Generation
-    parser.add_argument('-f', '--inputFile', type=str, help='Can read a csv file containing the locations for your ligands, receptors, and desired output directory in the column format. If expects that the file pairs the correct crystal ligand (.mol2 file) with the corresponding receptor (.pdb file). The format should look as follows (ligand, receptor, outputdirectory). All locations should be relative paths from the ./docker directory')
-    
-    
     ### Receptor and Ligand Parameters
     parser.add_argument("-r","--receptorFile",type=str, default="receptor.pdb",help="When docking a single Ligand-Receptor Pair, Receptor File. Takes .pdb, and might take other formats.")
-    parser.add_argument("-l","--ligandFile",type=str, default="crystal_ligand.mol2",help="When docking a single Ligand-Receptor Pair, Ligand File. Takes .mol2, and might take other formats.")
+    parser.add_argument("-p", "--pocket", choices=["ligand","coords"], default="ligand", help='Choices are "ligand" and "coords." If pocket="ligand", the user must provide a ligand file by which the pocket will be defined. If pocket="coords", the user must provide coordinates.')
+    parser.add_argument("-l","--ligandFile",type=str, required=("ligand" in argv),default="crystal_ligand.mol2",help="When docking a single Ligand-Receptor Pair, Ligand File. Takes .mol2, and might take other formats.")
+    parser.add_argument("--cords",required=("coords" in argv), type=list, help="Input a list of coordinates formated as [X coordinate of the center, Y coordinate of the center, Z coordinate of the center, size in the X dimension, size in the Y dimension, size in the Z dimension]. Sizes are in Angstroms")
     
     ### Docking Parameter
     parser.add_argument("-n","--numMode",type=int, default=100, help="Number of dockings to do for each probe. (Default: 100)")
     
-    ### Pharmacophore Feature Generation Parameters
-    
     ### Directory to Write
-    parser.add_argument("-w","--writeDirectory", default='.', type=str,help="When docking a single Ligand-Receptor Pair, Filename to write to. (Default is the Current Directory)")
-    
-    working_dir = os.getcwd()
+    parser.add_argument("-w","--writeDirectory", type=str, default=os.getcwd(),help="When docking a single Ligand-Receptor Pair, Filename to write to. (Default is the Current Directory)")
+
+    ### Machine Learning Ranking of Features 
+    parser.add_argument("-m", "--machineLearning",type=bool, default=False, help="If True, machine learning ranking of features will be performed") #specificies if machine learning-based ranking of features should be performed 
+
+
     args = parser.parse_args()
-    fragmentPrefilter = [-3.49, -3.19, -2.66, -2.33, -3.00, -2.50, -3.00, -1.00, -3.00]
-    kinds=["Aromatic", "PositiveIon", "NegativeIon", "HydrogenDonor", "HydrogenAcceptor", "Hydrophobic"]
-    
-    if args.inputFile == None:
-        recept = args.receptorFile
-        out_dir = args.writeDirectory
+    fragmentPrefilter = [-2, -2, -2, -2, -2, -2, -2, -1, -2]
+
+    recept = args.receptorFile
+    out_dir = args.writeDirectory
+
+
 
 #-------------------------------------------------------------------------------
 # RUN GNINA
 #-------------------------------------------------------------------------------
-        
+
+    if check_docked(fileList,out_dir)==False: #run gnina only if the docked sdf files are not already in the output folder 
         for key in fragments:
-            f = open("tempFragment.sdf", "w")
+            f = open(out_dir+"/tempFragment.sdf", "w")
             f.write(fragments[key])
             f.close()
-            subprocess.run(["gnina", "-r", recept, "-l", "tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--autobox_ligand", args.ligandFile])
-            os.remove('tempFragment.sdf')
+            if args.pocket=="ligand": #use autobox to identify the pocket
+                subprocess.run(["gnina", "-r", recept, "-l", out_dir+"/tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--autobox_ligand", args.ligandFile])
+            if args.pocket=="coords": #user must manually define the pocket
+                subprocess.run(["gnina", "-r", recept, "-l", out_dir+"/tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--center_x", args.pocket[0], "--center_y", args.pocket[1], 
+                    "--center_z", args.pocket[2], "--size_x", args.pocket[3], "--size_y", args.pocket[4], "--size_z", args.pocket[5]])
+            os.remove(out_dir+'/tempFragment.sdf')
+    else:
+        pass 
 #-------------------------------------------------------------------------------
 # Generate Pharmacophore
 #-------------------------------------------------------------------------------
-        for kind in kinds:
-            if(kind=="Hydrophobic"):
-                SMART=HYDROPHOBIC
-                nuPo= 10
-                maxEne= -2
-                criteria = "distance"
-                method = "ward"
-                clusterThreshold = 5
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-            elif(kind=="Aromatic"):
-                SMART= AROMATIC
-                nuPo= 10
-                maxEne= -2
-                criteria = 'distance'
-                method = 'ward'
-                clusterThreshold = 9
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-            elif(kind=="HydrogenDonor"):
-                SMART=HYDROGEN_DONOR
-                nuPo= 10
-                maxEne= -2
-                criteria = 'distance'
-                method = 'ward'
-                clusterThreshold = 9
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-            elif(kind=="HydrogenAcceptor"):
-                SMART=HYDROGEN_ACCEPTOR
-                nuPo= 10
-                maxEne= -2
-                criteria = 'distance'
-                method = 'ward'
-                clusterThreshold = 3
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-            elif(kind=="NegativeIon"):
-                SMART=NEGATIVE_ION
-                nuPo= 10
-                maxEne= -2
-                criteria = 'distance'
-                method = 'ward'
-                clusterThreshold = 1
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-            elif(kind=="PositiveIon"):
-                SMART=POSITIVE_ION
-                nuPo=6
-                maxEne= -2
-                criteria = 'distance'
-                method = 'complete'
-                clusterThreshold = 9
-                THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-
-            allSpheres=[]
-            thingCenters, thingEnergy=[],[]
-            thingFile = []
-            filteredCenters, filteredEnergy = [],[]
-            fileList = ['benzeneDocked.sdf','isopropylamineDocked.sdf', 'acetamideDocked.sdf', 'isopropanolDocked.sdf', 'imidazoleDocked.sdf', 'acetateDocked.sdf', 'isobutaneDocked.sdf', 'waterDocked.sdf', 'guanidineDocked.sdf']
-
-            for aia in fileList:
-                thingCentersTem, thingEnergyTem=splitter(getCenters(os.path.join(out_dir,aia), SMART))
-                thingCenters.extend(thingCentersTem)
-                thingEnergy.extend(thingEnergyTem)
-                for i, k in enumerate(thingEnergyTem):
-                    thingFile.append(aia)
-                #Cluster info. This isn't really useful without processing it using 
-
-            thingCluster=[]
-            if((len(thingCenters)>0)):
-                # Defining a prefiltering of Affinities by Feature Type
-                things = [thingCenters, thingEnergy, thingFile]
-                fragmentPrefilt = fragmentPrefilter
-                for i, thing in enumerate(thingCenters):
-                    fileIndex = fileList.index(thingFile[i])
-                    fragPrefilter = fragmentPrefilt[fileIndex]
-                    if thingEnergy[i] < fragPrefilter:
-                        filteredCenters.append(thingCenters.pop(i))
-                        filteredEnergy.append(thingEnergy.pop(i))
-
-                # Default Criteria: Distance; Default Method: Complete (As defined in the args section above)
-                filteredCenters = np.array(filteredCenters)
-                filteredEnergy = np.array(filteredEnergy)
-
-                if filteredCenters.size != 0:
-                    thingCluster=scip.fclusterdata(filteredCenters, t = clusterThreshold, criterion = criteria, method = method)
-                    thingCenterspheres=sortCenter(filteredCenters, thingCluster, filteredEnergy)
-                    allSpheres.extend(thingCenterspheres)
-                    #If you want to remove all the single molecule clusters
-                    allSpheres=purge(allSpheres, THRESHOLD)
-                    #print(allSpheres)
-
-
-                if os.path.exists(out_dir+'/'+'GeneratedPharma.json') == False:
-                    #If you want to remove all the single molecule clusters
-                    allSpheres=purge(allSpheres, THRESHOLD)
-                    pharma=allJsonify(kind, allSpheres)
-                    jason = json.dumps(pharma)
-                    f = open(out_dir+"/"+"GeneratedPharma.json","w")
-                    f.write(jason)
-                    f.close()
-
-                else:
-                    allspheres = purge(allSpheres, THRESHOLD)
-                    pharma = jsonify(kind, allSpheres)
-                    # function to add to JSON
-                    def write_json(data, filename=out_dir+'GeneratedPharma.json'):
-                        with open(filename,'w') as f:
-                            json.dump(data, f, indent=4)
-                    y = {"receptor": str(open(recept).read()), "recname": recept}
-                    with open(out_dir+'GeneratedPharma.json') as json_file:
-                        data = json.load(json_file)
-                        data.update(y)
-
-                        temp = data['points']
-
-                        temp.extend(pharma)
-
-                    write_json(data)
-
+    all_kinds=[]
+    receptor_name=recept #parse out pdb id of receptor
+    if "pdb" in receptor_name:
+        receptor_name=receptor_name.replace(".pdb","")
+        if "/" in receptor_name:
+            receptor_name=receptor_name.split("/")
+            receptor_name=receptor_name[-1]
+    elif "mol2" in receptor_name:
+        receptor_name=receptor_name.replace(".mol2","")
+        if "/" in receptor_name:
+            receptor_name=receptor_name.split("/")
+            receptor_name=receptor_name[-1]
     else:
-        file = np.genfromtxt(args.inputFile, dtype=str, delimiter=',')
-        ligands, receptors, outs = file[:, 0], file[:, 1], file[:, 2]
+        raise Exception("Receptor file has unknwon format. Receptor name can only be extracted from .pdb and .mol2 files")   
 
-    #-------------------------------------------------------------------------------
-    # RUN GNINA
-    #-------------------------------------------------------------------------------
-        for key in fragments:
-            for i, ligand in enumerate(receptors):
-                f = open("tempFragment.sdf", "w")
-                f.write(fragments[key])
+    for kind in kinds:
+        print(kind)
+        if(kind=="Hydrophobic"):
+            SMART=HYDROPHOBIC
+            nuPo= 10
+            maxEne= -2
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+        elif(kind=="Aromatic"):
+            SMART= AROMATIC
+            nuPo= 10
+            maxEne= -2
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+        elif(kind=="HydrogenDonor"):
+            SMART=HYDROGEN_DONOR
+            nuPo= 10
+            maxEne= -2
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+        elif(kind=="HydrogenAcceptor"):
+            SMART=HYDROGEN_ACCEPTOR
+            nuPo= 10
+            maxEne= -2
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+        elif(kind=="NegativeIon"):
+            SMART=NEGATIVE_ION
+            nuPo= 10
+            maxEne= -2
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+        elif(kind=="PositiveIon"):
+            SMART=POSITIVE_ION
+            nuPo=6
+            maxEne= -2
+            clusterThreshold = 1
+            THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
+
+        allSpheres=[]
+        thingCenters, thingEnergy, thingcnnEnergy, thingcnnScore, thingFile=[],[],[],[],[] #thingFile is a list of the fragments were each center came fromhbg nb
+        filteredCenters, filteredEnergy, filteredcnnEnergy, filteredcnnScore, filteredFile = [],[],[],[],[]
+
+        for aia in fileList: #fileList is the list of docked fragment sdf files 
+            thingCentersTem, thingEnergyTem, thingcnnEnergyTem, thingcnnScoreTem=getCenters(os.path.join(out_dir,aia), SMART)
+            thingCenters.extend(thingCentersTem)
+            thingEnergy.extend(thingEnergyTem)
+            thingcnnEnergy.extend(thingcnnEnergyTem)
+            thingcnnScore.extend(thingcnnScoreTem)
+            for i, k in enumerate(thingEnergyTem):
+                thingFile.append(aia)
+
+        print(thingCenters)
+            
+        #below is used to prefilter fragments
+        #thingCluster=[]
+        #if((len(thingCenters)>0)):
+            # Defining a prefiltering of Affinities by Feature Type
+            #things = [thingCenters, thingEnergy, thingcnnEnergy, thingcnnScore, thingFile] #is this necessary? 
+            # Docked fragment prefiltering 
+            # Default Criteria: Distance; Default Method: Complete (As defined in the args section above)
+            #fragmentPrefilt = fragmentPrefilter
+            #for i, thing in enumerate(thingCenters):
+                #fileIndex = fileList.index(thingFile[i])
+                #fragPrefilter = fragmentPrefilt[fileIndex]
+                #if thingEnergy[i] < fragPrefilter:
+                    #filteredCenters.append(thingCenters.pop(i))
+                    #filteredEnergy.append(thingEnergy.pop(i))
+                    #filteredcnnEnergy.append(thingcnnEnergy.pop(i))
+                    #filteredcnnScore.append(thingcnnScore.pop(i))
+                    #filteredFile.append(thingFile.pop(i)) #need to do this step to match fragment with cluster 
+
+            #filteredCenters = np.array(filteredCenters)
+            #filteredEnergy = np.array(filteredEnergy)
+            #filteredcnnEnergy = np.array(filteredcnnEnergy)
+            #filteredcnnScore = np.array(filteredcnnScore)
+            #filteredFile = np.array(filteredFile)
+                
+        #cluster features 
+        #hierarchechal clustering settings
+        #settings are currently the same across all features types  
+        criteria="distance"
+        method="complete"
+        clusterThreshold=1
+
+        if len(thingCenters) != 0:
+            thingCluster=scip.fclusterdata(thingCenters, t = clusterThreshold, criterion = criteria, method = method)
+            #thingCluster is a list of the same length as thingCenters were each number is the assigned cluster for each item in thingCenters
+            #for example thingCluster=[5,4,...], then the first center is in cluster 5, the second one is in cluster 4, etc
+            thingCenterspheres=sortCenter(thingCenters, thingCluster, thingEnergy, thingcnnEnergy, thingcnnScore, thingFile) #if had done fragment prefiltering, would have to change these inputs
+            allSpheres.extend(thingCenterspheres)
+            #filter clusters based on energy and cluster size cutoffs for each pharma kind
+            #allSpheres=purge(allSpheres, THRESHOLD)
+
+
+        allSphereskind=all_kinds_list(allSpheres,kind) 
+        for item in allSphereskind:
+            all_kinds.append(item)
+
+    features_df=make_df(all_kinds) #dataframe of all features
+
+    if args.machineLearning==False:
+        if os.path.exists(out_dir+'/'+receptor_name+'.csv') == False: #make a csv of all features only if it is not already present 
+            features_df.to_csv(out_dir+'/'+receptor_name+'.csv', index=False)
+        if os.path.exists(out_dir+'/'+'GeneratedPharma.json') == False:
+            json_list=[]
+            for index, row in features_df.iterrows():
+                enabled= True
+                s={'name': row["pharmaKind"],'x': row["x"],'y':row["y"],'z':row["z"],'radius':1,'enabled':enabled} #I set radius for all json features to 1. will still retain ML feature of varying radius
+                json_list.append(s)  
+            pointDict={"points": json_list}
+            with open(out_dir+'/GeneratedPharma.json','w') as f:
+                jason=json.dumps(pointDict,indent=4)
+                f.write(jason)
                 f.close()
-                subprocess.run(["gnina", "-r", recept, "-l", "tempFragment.sdf", "-o", out_dir + "/" + key+"Docked.sdf", "--num_modes", str(args.numMode), "--autobox_ligand", args.ligandFile])
-                os.remove("tempFragment.sdf")
-    #-------------------------------------------------------------------------------
-    # GENERATE PHARMACOPHORE
-    #-------------------------------------------------------------------------------
-        for receptor in enumerate(receptors):
-            os.chdir(outs[i])
-            for kind in kinds:
-                SMART=[]
+        else:
+            pass
 
-                if(kind=="Hydrophobic"):
-                    SMART=HYDROPHOBIC
-                    nuPo= 6
-                    maxEne= -2
-                    criteria = "distance"
-                    method = "ward"
-                    clusterThreshold = 5
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-                elif(kind=="Aromatic"):
-                    SMART= AROMATIC
-                    nuPo= 6
-                    maxEne= -2
-                    criteria = 'distance'
-                    method = 'ward'
-                    clusterThreshold = 6
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-                elif(kind=="HydrogenDonor"):
-                    SMART=HYDROGEN_DONOR
-                    nuPo= 4
-                    maxEne= -2
-                    criteria = 'distance'
-                    method = 'ward'
-                    clusterThreshold = 5
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-                elif(kind=="HydrogenAcceptor"):
-                    SMART=HYDROGEN_ACCEPTOR
-                    nuPo= 4
-                    maxEne= -2
-                    criteria = 'distance'
-                    method = 'ward'
-                    clusterThreshold = 3
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-                elif(kind=="NegativeIon"):
-                    SMART=NEGATIVE_ION
-                    nuPo= 3
-                    maxEne= -3
-                    criteria = 'distance'
-                    method = 'ward'
-                    clusterThreshold = 1
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-                elif(kind=="PositiveIon"):
-                    SMART=POSITIVE_ION
-                    nuPo=6
-                    maxEne= -1
-                    criteria = 'distance'
-                    method = 'complete'
-                    clusterThreshold = 6
-                    THRESHOLD={"type": kind,"numPoint": nuPo, "energy": maxEne}
-
-
-                allSpheres=[]
-                thingCenters, thingEnergy=[],[]
-                thingFile = []
-                filteredCenters, filteredEnergy = [],[]
-                fileList = ['benzeneDocked.sdf','isopropylamineDocked.sdf', 'acetamideDocked.sdf', 'isopropanolDocked.sdf', 'imidazoleDocked.sdf', 'acetateDocked.sdf', 'isobutaneDocked.sdf', 'waterDocked.sdf', 'guanidineDocked.sdf']
-
-                for aia in fileList:
-                    thingCentersTem, thingEnergyTem=splitter(getCenters(os.path.join(out_dir, aia), SMART))
-                    thingCenters.extend(thingCentersTem)
-                    thingEnergy.extend(thingEnergyTem)
-                    for i, k in enumerate(thingEnergyTem):
-                        thingFile.append(sdfmol)
-                    #Cluster info. This isn't really useful without processing it using 
-
-                thingCluster=[]
-                if((len(thingCenters)>0)):
-                    # Defining a prefiltering of Affinities by Feature Type
-                    things = [thingCenters, thingEnergy, thingFile]
-                    fragmentPrefilt = args.fragmentPrefilter
-                    for i, thing in enumerate(thingCenters):
-                        fileIndex = fileList.index(thingFile[i])
-                        fragPrefilter = fragmentPrefilt[fileIndex]
-                        if thingEnergy[i] < fragPrefilter:
-                            filteredCenters.append(thingCenters.pop(i))
-                            filteredEnergy.append(thingEnergy.pop(i))
-
-                    # Default Criteria: Distance; Default Method: Complete (As defined in the args section above)
-                    filteredCenters = np.array(filteredCenters)
-                    filteredEnergy = np.array(filteredEnergy)
-
-                    if filteredCenters.size != 0:
-                        thingCluster=scip.fclusterdata(filteredCenters, t = clusterThreshold, criterion = criteria, method = method)
-                        thingCenterspheres=sortCenter(filteredCenters, thingCluster, filteredEnergy)
-                        allSpheres.extend(thingCenterspheres)
-                        #If you want to remove all the single molecule clusters
-                        allSpheres=purge(allSpheres, THRESHOLD)
-                        
-                    if os.path.exists(out_dir+'/'+'GeneratedPharma.json') == False:
-
-                        #If you want to remove all the single molecule clusters
-                        allSpheres=purge(allSpheres, THRESHOLD)
-                        pharma=allJsonify(kind, allSpheres)
-                        jason = json.dumps(pharma)
-                        f = open(out_dir+"/"+"GeneratedPharma.json","w")
-                        f.write(jason)
-                        f.close()
-
-                    else:
-                        allspheres = purge(allSpheres, THRESHOLD)
-                        pharma = jsonify(kind, allSpheres)
-                        # function to add to JSON
-                        def write_json(data, filename=out_dir+'GeneratedPharma.json'):
-                            with open(filename,'w') as f:
-                                json.dump(data, f, indent=4)
-                        
-                        y = {"receptor": str(open(recept).read()), "recname": recept}
-
-                        with open(out_dir+'GeneratedPharma.json') as json_file:
-                            data = json.load(json_file)
-                            data.update(y)
-
-                            temp = data['points']
-
-                            temp.extend(pharma)
-
-                        write_json(data)
-
+    if args.machineLearning==True:
+        features_df=rank_ml(features_df)
+        features_df=features_df.sort_values(by=["NeuralNetwork"],ascending=False)
+        if os.path.exists(out_dir+'/'+receptor_name+'.csv') == False: #make a csv of all features only if it is not already present 
+            features_df.to_csv(out_dir+'/'+receptor_name+'.csv', index=False)
+        features_df.to_csv(out_dir+'/'+receptor_name+'.csv', index=False)
+        #this would make a json of the Top N features
+        topN=10
+        top_features_df=rank_ml_thresholded(features_df, topN, "NeuralNetwork")
+        #this makes a json of all features
+        if os.path.exists(out_dir+'/GeneratedPharma.json') == False:
+            json_list=[]
+            for index, row in features_df.iterrows():
+                enabled= True
+                #if machine learning is set to true, features will be ranked based on neural network scores (although this could be changed) and it will also print out the score 
+                s={'name': row["pharmaKind"],'x': row["x"],'y':row["y"],'z':row["z"],'radius':1,'enabled':enabled, "rank":row["NeuralNetwork"]} #I set radius for all json features to 1. will still retain ML feature of varying radius
+                json_list.append(s)  
+            pointDict={"points": json_list}
+            with open(out_dir+'/GeneratedPharma.json','w') as f:
+                jason=json.dumps(pointDict,indent=4)
+                f.write(jason)
+                f.close()
+        if os.path.exists(out_dir+'/Top'+str(topN)+'.json') == False:
+            json_list=[]
+            for index, row in top_features_df.iterrows():
+                enabled= True
+                #if machine learning is set to true, features will be ranked based on neural network scores (although this could be changed) and it will also print out the score 
+                s={'name': row["pharmaKind"],'x': row["x"],'y':row["y"],'z':row["z"],'radius':1,'enabled':enabled, "rank":row["NeuralNetwork"]} #I set radius for all json features to 1. will still retain ML feature of varying radius
+                json_list.append(s)  
+            pointDict={"points": json_list}
+            with open(out_dir+'/Top'+str(topN)+'.json','w') as f:
+                jason=json.dumps(pointDict,indent=4)
+                f.write(jason)
+                f.close()
 
 if __name__ == '__main__':
     main()
